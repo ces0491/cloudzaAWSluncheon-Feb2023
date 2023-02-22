@@ -1,0 +1,420 @@
+---
+format: 
+  revealjs:
+    embed-resources: true
+    touch: true
+    controls: true
+    multiplex:
+      url: 'https://ctobias-presentations.s3.amazonaws.com/cloudzaAWSluncheon-Feb2023.html'
+    # chalkboard:
+    #   theme: whiteboard
+    theme: ["./theme/q-theme.scss"]
+    slide-number: c/t
+    logo: "./graphics/ss_logo_name.png"
+    footer: "CloudZA & AWS Healthcare Luncheon - Feb 2023"
+    code-copy: true
+    center-title-slide: false
+    include-in-header: heading-meta.html
+    code-link: true
+    code-overflow: wrap
+    highlight-style: a11y
+    height: 1080
+    width: 1920
+execute: 
+  eval: true
+  echo: true
+---
+
+<h1>Wrangling over-sized data <br> A gentle intro</h1>
+
+<h2>with Amazon S3, Apache Arrow and `dplyr`</h2>
+
+<hr>
+
+<h3>[Cesaire Tobias](https://www.linkedin.com/in/cesaire-tobias-5555a274/), Data Nerd</h3>
+
+<h3>2023-02-23</h3>
+
+<br>
+
+<h3>
+
+`r fontawesome::fa("github", "black")` &nbsp; [https://github.com/ces0491](https://github.com/ces0491)
+
+![](./graphics/qrcode)
+
+![](./graphics/s3hex.png){.absolute top="425" left="1100" width="300"}
+
+![](https://arrow.apache.org/img/offbrand_hex_2.png){.absolute top="425" right="220" width="300"}
+![](https://raw.githubusercontent.com/rstudio/hex-stickers/master/PNG/dplyr.png){.absolute top="680" left="1250" width="300"}
+
+## Overview
+
+<br>
+
+-   Intro
+
+. . .
+
+-   Meaningful analytics
+
+. . .
+
+-   Working with over-sized data
+
+. . .
+
+-   What is S3, Arrow and dplyr?
+
+. . .
+
+-   Example workflow
+
+. . .
+
+-   Questions
+
+## Intro
+<br>
+
+. . .
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+![](./graphics/intro_meme.png){width="600"}
+:::
+
+::: {.column width="50%"}
+
+:::
+
+::::
+
+## Intro
+<br>
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+![](./graphics/intro_meme.png){width="600"}
+:::
+
+::: {.column width="50%"}
+<br>
+
+-   R enthusiast
+
+-   Learned to code as a quant working in asset management
+
+-   Used data analytics as a path to working in management consulting, tech and e-commerce
+
+-   Did most of my early analysis in Excel and transitioned to R
+
+-   Added SQL, Python and Cloud technologies to my toolkit
+
+-   Passionate about making data analytics meaningful
+
+  -   Timely, Useful and Correct (TUC)
+
+:::
+
+::::
+
+## Meaningful analytics
+
+<br>
+
+[ *Big healthcare data is incredibly powerful, but its Achilles heel is time. Its value is in the moment and its importance decreases exponentially with time, which makes critically important the rapid response and concerted effort to process collected clinical information.* ]{style="font-size:48px;text-align:center"}
+
+[ [- Volume and Value of Big Healthcare Data, Journal of Medical Statistics and Informatics, 2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4795481/) ]{style="font-size:36px;text-align:center"}
+
+## The value decay of data
+
+<br>
+
+::: columns
+::: {.column width="70%"}
+![[- Volume and Value of Big Healthcare Data, Journal of Medical Statistics and Informatics, 2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4795481/)](./graphics/data_decay.png)
+:::
+
+::: {.column width="30%"}
+[ Parallels between the growth in size and decay in value of large heterogeneous datasets. The horizontal axis represents time, whereas the vertical axis shows the value of data. As we acquire more data at an ever faster rate, its size and value exponentially increase (black curve). The color curves indicate the exponential decay of the value of data from the point of its fixation (becoming static). ]{style="font-size:36px;text-align:justify"}
+:::
+:::
+
+## Working with over-sized data
+
+-   Relational databases are still around and hugely popular but
+
+. . .
+
+-   Data and specifically *local* files are getting bigger
+
+. . .
+
+-   Additionally, many Data Warehouses/Data Lakes use flat-file storage (`.csv`, `.parquet`, `.json` etc) - there are query engines in many environments, but you can often end up with large extracts.
+
+. . .
+
+<hr>
+
+So, how do you work with data extracts that aren't already in a database, and are bigger than your memory?
+
+. . .
+
+How can we perform EDA on these over-sized datasets in a familiar environment that allows us to quickly realise value from our data?
+
+## What is Arrow, S3 and dplyr?
+
+::: columns
+::: {.column width="33%"}
+![](https://arrow.apache.org/img/offbrand_hex_2.png){width="900"} [ Apache Arrow is a language-agnostic framework that combines the benefits of columnar data structures with in-memory computing. It is a highly standardised and performant framework. ]{style="font-size:28px;text-align:justify"}
+:::
+
+::: {.column width="33%"}
+![](./graphics/s3hex.png){width="900"} [ Amazon Simple Storage Service is an object storage service offering industry-leading scalability, data availability, security, and performance. ]{style="font-size:28px;text-align:justify"}
+:::
+
+::: {.column width="33%"}
+![](https://raw.githubusercontent.com/rstudio/hex-stickers/master/PNG/dplyr.png){width="900"} [ One of the core packages of the tidyverse in the R programming language, dplyr is primarily a set of functions designed to enable dataframe manipulation in an intuitive, user-friendly way. ]{style="font-size:28px;text-align:justify"}
+:::
+:::
+
+## Over-sized data wrangling example
+
+There are great examples of data analysis on big data (2 billion rows) in the [`arrow` docs](https://arrow.apache.org/docs/r/articles/dataset.html).
+
+. . .
+
+For today, I'm going to focus on biggish (but manageable) subset of the NYC taxi data
+
+. . .
+
+<hr>
+
+My sample is 20GB on disk and is 36 separate parquet files partitioned by year and month
+
+```{r, echo = FALSE}
+fs::dir_tree('./data/nyc-taxi')
+```
+
+. . .
+
+<br>
+
+So not *THAT* big but big enough to make this a hassle to analyse with your standard desktop toolkit
+
+## Workflow - Reading the data
+
+<br>
+
+First things first, we need to read in our data
+
+. . .
+
+The data lives in an S3 bucket created by Voltron Data and is freely accessible
+
+```{r, echo = TRUE}
+
+bucket_name <- "voltrondata-labs-datasets"
+dataset_name <- "nyc-taxi"
+fs_path <- paste(bucket_name, dataset_name, sep = "/")
+
+bucket <- arrow::s3_bucket(fs_path)
+datatables <- bucket$ls(recursive = TRUE)
+
+```
+
+<br>
+
+. . .
+
+-   We can connect to large datasets in the cloud but don't need to be familiar with cloud querying tools.
+-   Data becomes increasingly democratised as more analysts can work with the data without leaving their familiar tools and without needing any additional setup.
+
+## Workflow - Opening the data
+
+<br>
+
+Next we open the dataset - not quite the same as loading the data.
+
+. . .
+
+```{r, echo = TRUE}
+nyc_taxi <- arrow::open_dataset('./data/nyc-taxi')
+```
+
+```{r, echo = FALSE}
+format(nrow(nyc_taxi), scientific = FALSE, big.mark = ",")
+```
+
+Our data is 428 million rows
+
+```{r, echo = TRUE}
+lobstr::obj_size(nyc_taxi)
+```
+
+But occupies less than 0.5Mb in our local environment!
+
+## Workflow - Wrangling the data
+ 
+ <br>
+ 
+As we saw previously, our data isn't loaded in to R (as for e.g. a data.frame) but it is a Filesytem object that reads files as needed. These files can be wrangled with `dplyr` for efficient EDA.
+
+::: columns
+::: {.column width="50%"}
+```{r, echo = TRUE}
+
+trip_data <- nyc_taxi |> 
+  dplyr::filter(year == 2010) |>
+  dplyr::select(matches("pickup"), matches("dropoff"))
+
+trip_data
+
+```
+:::
+
+::: {.column width="50%"}
+The output is an unevaluated query so we need to use `collect()` to evaluate and return to R
+```{r, eval = FALSE}
+# this collect is timing out for some reason
+trip_data |>
+  dplyr::collect()
+
+```
+```{r, eval = TRUE, echo = FALSE}
+readRDS('./data/trip_df.rds')
+```
+:::
+:::
+
+## Workflow - Presenting the data
+
+from a `FileSystemDataset` object
+
+```{r, echo = TRUE}
+distance_fs <- nyc_taxi |>
+  dplyr::select(vendor_name, trip_distance, month) |>
+  dplyr::group_by(month, vendor_name) |>
+  dplyr::summarize(distance = sum(trip_distance, na.rm = TRUE))
+```
+
+<br>
+
+To a `tibble`
+
+```{r, echo = FALSE}
+distance_df <- distance_fs |>
+  dplyr::collect()
+
+distance_df_fmt <- distance_df %>% 
+  dplyr::mutate(date = lubridate::make_date(year = 2010, month = month, day = 1)) %>% 
+  dplyr::mutate(month_name = month.name[month]) %>% 
+  dplyr::mutate(distance_str = format(distance, scientific = FALSE, big.mark = ","))
+
+head(distance_df_fmt)
+```
+
+
+## Workflow - Presenting the data
+
+To charts
+
+```{r, echo = TRUE}
+p <- ggplot2::ggplot(data = distance_df_fmt, ggplot2::aes(x = date, y = distance, color = vendor_name)) +
+  ggplot2::geom_line() +
+  ggplot2::scale_y_continuous(labels  = 
+                       scales::label_number(scale = 1e-6, prefix = "", suffix = "", accuracy = 1)) +
+  ggplot2::scale_x_date(date_labels = "%b") +
+  ggplot2::ylab("distance (millions of miles)") +
+  ggplot2::ggtitle("Total Distance Travelled per Vendor, per Month")+
+  ggplot2::theme_minimal()
+
+plotly::ggplotly(p, width = 1600, height = 400)
+```
+
+. . .
+
+And beyond
+We can then use any function in R to further explore, analyse or model our data
+
+
+
+## Bonus - Modelling
+<br>
+
+```{r, eval = FALSE, echo = FALSE}
+nyc_taxi_df <- nyc_taxi |>
+  dplyr::filter(year == 2010) |>
+  dplyr::mutate(tip_pct = tip_amount / total_amount)|>
+  dplyr::select(year, tip_amount, total_amount, tip_pct, passenger_count) |>
+  dplyr::collect()
+```
+
+```{r, eval = TRUE, echo = FALSE}
+nyc_taxi_df <- readRDS('./data/nyc_taxi_df.rds')
+```
+::: columns
+::: {.column width="50%"}
+
+Randomly sample our data, use `map_batches` to sample a percentage of rows from each batch:
+
+```{r, echo = TRUE}
+sampled_data <- nyc_taxi |>
+  dplyr::filter(year == 2010) |>
+  dplyr::mutate(tip_pct = tip_amount / total_amount)|>
+  dplyr::select(year, tip_amount, total_amount, tip_pct, passenger_count) |>
+  arrow::map_batches(~ arrow::as_record_batch(dplyr::sample_frac(as.data.frame(.), 1e-4))) |>
+  dplyr::collect() # collect again because record_batch returns an arrow batch object
+
+str(sampled_data)
+```
+:::
+
+::: {.column width="50%"}
+
+Fit a linear model to the sample data
+<br>
+```{r, echo = TRUE}
+model <- lm(tip_pct ~ total_amount + passenger_count, data = sampled_data)
+```
+```{r, echo = FALSE}
+# ggplot2::ggplot(sampled_data, ggplot2::aes(x=passenger_count, y=tip_pct)) + 
+#   ggplot2::geom_point()+
+#   ggplot2::geom_smooth(method=lm)
+```
+```{r, echo = FALSE}
+broom::glance(model)
+```
+:::
+:::
+
+## Bonus - Modelling (cont)
+<br>
+
+Then use `map_batches` to compute summary stats on the full 2010 dataset
+```{r, eval = FALSE, echo = TRUE}
+mse <- nyc_taxi %>%
+  dplyr::filter(year == 2010) %>%
+  dplyr::select(tip_amount, total_amount, passenger_count) %>%
+  dplyr::mutate(tip_pct = tip_amount / total_amount) %>%
+  arrow::map_batches(function(batch) {
+    batch %>%
+      as.data.frame() %>%
+      dplyr::mutate(pred_tip_pct = stats::predict(model, newdata = .)) %>%
+      dplyr::filter(!is.nan(tip_pct)) %>%
+      dplyr::summarize(sse_partial = sum((pred_tip_pct - tip_pct)^2), n_partial = dplyr::n()) %>%
+      arrow::as_record_batch()
+  }) %>%
+  dplyr::summarize(mse = sum(sse_partial) / sum(n_partial)) %>%
+  dplyr::pull(mse, as_vector = TRUE)
+```
+```{r, eval = TRUE, echo = FALSE}
+readRDS('./data/mse.rds')
+```
+
+## Questions {background-image="./graphics/thank-you-word-cloud.jpg" background-size="contain" chalkboard-buttons="false"}
